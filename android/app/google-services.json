@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "707911156548",
+    "project_id": "exocarp-mango-leaf",
+    "storage_bucket": "exocarp-mango-leaf.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:707911156548:android:d9a4431075485a391e0d11",
+        "android_client_info": {
+          "package_name": "com.example.exocarp"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "707911156548-hds04bdrjrd7h3tpamrkhd1ntjf1co3g.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.exocarp",
+            "certificate_hash": "4865a85e62722f9c95f957243a64c8feea3a77ec"
+          }
+        },
+        {
+          "client_id": "707911156548-bvik28u61j8qld8kq1hdlco5vpfu9d8c.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyClwiYTIIQ0qu8UiwjMqHGW_Xy6gy9A76w"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "707911156548-bvik28u61j8qld8kq1hdlco5vpfu9d8c.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "707911156548-vjfim35dn4apjrphlh2ijvvjbd9menpo.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.exocarp"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
