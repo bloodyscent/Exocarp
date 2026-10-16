@@ -1,32 +1,38 @@
+
 from pathlib import Path
 import json
+
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
 from sklearn.model_selection import train_test_split
-from PIL import Image
+from sklearn.metrics import classification_report, confusion_matrix
+
 
 # ============================================================
 # EXOCARP - Mango Leaf Disease Detection
-# MobileNetV2 Training Script
+# MobileNetV2: Training, Fine-Tuning, Evaluation, and TFLite
 # ============================================================
 
-# -----------------------------
-# 1. Configuration
-# -----------------------------
+# 1. CONFIGURATION
 
-DATASET_DIR = Path(r"C:\FlutterProjects\exocarp\MangoDataset\process data")
-OUTPUT_DIR = Path(r"C:\FlutterProjects\exocarp\ai\models")
+DATASET_DIR = Path(
+    r"C:\FlutterProjects\Exocarp\MangoDataset\process data"
+)
+
+OUTPUT_DIR = Path(
+    r"C:\FlutterProjects\Exocarp\ai\models"
+)
 
 IMAGE_SIZE = (224, 224)
 BATCH_SIZE = 16
 SEED = 42
-EPOCHS = 20
 
-# -----------------------------
-# 2. Class names
-# -----------------------------
+INITIAL_EPOCHS = 15
+FINE_TUNE_EPOCHS = 10
+
+VALID_EXTENSIONS = {".jpg", ".jpeg", ".png"}
 
 CLASS_NAMES = [
     "Anthracnose",
@@ -41,112 +47,118 @@ CLASS_NAMES = [
 
 NUM_CLASSES = len(CLASS_NAMES)
 
-print("=" * 60)
-print("EXOCARP - Mango Leaf Disease Detection")
-print("=" * 60)
+tf.keras.utils.set_random_seed(SEED)
 
-print(f"Dataset: {DATASET_DIR}")
-print(f"Classes: {NUM_CLASSES}")
-print(f"Image size: {IMAGE_SIZE}")
-print(f"Batch size: {BATCH_SIZE}")
+
+# 2. CHECK ENVIRONMENT AND DATASET
+
+print("=" * 65)
+print("EXOCARP - Mango Leaf Disease Detection")
+print("=" * 65)
+print("TensorFlow:", tf.__version__)
+print("Dataset:", DATASET_DIR)
+print("Output:", OUTPUT_DIR)
+print("Classes:", NUM_CLASSES)
+print("Image size:", IMAGE_SIZE)
 print()
 
-# -----------------------------
-# 3. Check dataset
-# -----------------------------
-
-if not DATASET_DIR.exists():
+if not DATASET_DIR.is_dir():
     raise FileNotFoundError(
-        f"Dataset folder was not found:\n{DATASET_DIR}"
+        f"Dataset directory not found:\n{DATASET_DIR}"
     )
 
 for class_name in CLASS_NAMES:
-    class_dir = DATASET_DIR / class_name
-
-    if not class_dir.exists():
+    if not (DATASET_DIR / class_name).is_dir():
         raise FileNotFoundError(
-            f"Missing class folder:\n{class_dir}"
+            f"Missing class folder:\n{DATASET_DIR / class_name}"
         )
 
-# -----------------------------
-# 4. Collect image paths
-# -----------------------------
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+
+# 3. COLLECT IMAGE PATHS AND LABELS
 
 image_paths = []
 labels = []
 
-valid_extensions = {".jpg", ".jpeg", ".png"}
+print("Image counts by class:")
+print("-" * 65)
 
 for class_index, class_name in enumerate(CLASS_NAMES):
     class_dir = DATASET_DIR / class_name
 
-    class_images = [
-        path
-        for path in class_dir.rglob("*")
-        if path.is_file() and path.suffix.lower() in valid_extensions
-    ]
+    class_images = sorted(
+        p for p in class_dir.rglob("*")
+        if p.is_file() and p.suffix.lower() in VALID_EXTENSIONS
+    )
 
-    print(f"{class_name}: {len(class_images)} images")
+    print(f"{class_name}: {len(class_images)}")
 
-    for image_path in class_images:
-        image_paths.append(str(image_path))
-        labels.append(class_index)
+    if len(class_images) < 3:
+        raise ValueError(
+            f"Not enough images for class: {class_name}"
+        )
 
-image_paths = np.array(image_paths)
-labels = np.array(labels)
+    image_paths.extend(str(p) for p in class_images)
+    labels.extend([class_index] * len(class_images))
 
+image_paths = np.asarray(image_paths)
+labels = np.asarray(labels, dtype=np.int32)
+
+print("-" * 65)
+print("Total images:", len(image_paths))
 print()
-print(f"Total images: {len(image_paths)}")
 
-# -----------------------------
-# 5. Split dataset
-# -----------------------------
-#
-# First:
-# 85% temporary training data
-# 15% test data
-#
-# Then split the 85%:
-# 82.35% training -> approximately 70% total
-# 17.65% validation -> approximately 15% total
-#
-# Final:
-# 70% training
-# 15% validation
-# 15% testing
-# -----------------------------
 
-train_paths, test_paths, train_labels, test_labels = train_test_split(
-    image_paths,
-    labels,
-    test_size=0.15,
-    random_state=SEED,
-    stratify=labels,
+# 4. SPLIT DATA
+#
+# Approximately 70% training, 15% validation, 15% testing.
+# The test set is held out until final evaluation.
+#
+# IMPORTANT:
+# If the dataset contains multiple augmented copies of the same
+# original image, those related images should be grouped together
+# before splitting. This script assumes process data contains
+# independent images. Verify this if the dataset has duplicates.
+
+train_paths, test_paths, train_labels, test_labels = (
+    train_test_split(
+        image_paths,
+        labels,
+        test_size=0.15,
+        random_state=SEED,
+        stratify=labels,
+    )
 )
 
-train_paths, val_paths, train_labels, val_labels = train_test_split(
-    train_paths,
-    train_labels,
-    test_size=(15 / 85),
-    random_state=SEED,
-    stratify=train_labels,
+train_paths, val_paths, train_labels, val_labels = (
+    train_test_split(
+        train_paths,
+        train_labels,
+        test_size=(15 / 85),
+        random_state=SEED,
+        stratify=train_labels,
+    )
 )
 
+print("Data split:")
+print(f"Training:   {len(train_paths)}")
+print(f"Validation: {len(val_paths)}")
+print(f"Testing:    {len(test_paths)}")
 print()
-print("Dataset split:")
-print(f"Training:   {len(train_paths)} images")
-print(f"Validation: {len(val_paths)} images")
-print(f"Testing:    {len(test_paths)} images")
 
-# -----------------------------
-# 6. Image loading function
-# -----------------------------
+
+# 5. IMAGE LOADING
+#
+# Input images remain in the 0-255 range here.
+# MobileNetV2 preprocessing is embedded in the model below.
+# This means the exported TFLite model expects RGB 0-255 inputs.
 
 def load_image(path, label):
-    image = tf.io.read_file(path)
+    image_bytes = tf.io.read_file(path)
 
-    image = tf.image.decode_image(
-        image,
+    image = tf.io.decode_image(
+        image_bytes,
         channels=3,
         expand_animations=False,
     )
@@ -156,6 +168,7 @@ def load_image(path, label):
     image = tf.image.resize(
         image,
         IMAGE_SIZE,
+        antialias=True,
     )
 
     image = tf.cast(image, tf.float32)
@@ -163,9 +176,7 @@ def load_image(path, label):
     return image, label
 
 
-# -----------------------------
-# 7. Create TensorFlow datasets
-# -----------------------------
+# 6. BUILD TF.DATA PIPELINES
 
 train_dataset = tf.data.Dataset.from_tensor_slices(
     (train_paths, train_labels)
@@ -194,29 +205,30 @@ test_dataset = test_dataset.map(
     num_parallel_calls=tf.data.AUTOTUNE,
 )
 
-# -----------------------------
-# 8. Data augmentation
-# -----------------------------
+
+# 7. DATA AUGMENTATION
+#
+# Applied only during training, not validation or testing.
 
 data_augmentation = keras.Sequential(
     [
         layers.RandomFlip("horizontal"),
-        layers.RandomRotation(0.1),
-        layers.RandomZoom(0.1),
-        layers.RandomContrast(0.1),
+        layers.RandomRotation(0.08),
+        layers.RandomZoom(0.10),
+        layers.RandomContrast(0.10),
     ],
     name="data_augmentation",
 )
 
-# -----------------------------
-# 9. Prepare datasets
-# -----------------------------
+
+# 8. BATCH AND PREFETCH
 
 train_dataset = (
     train_dataset
     .shuffle(
         buffer_size=len(train_paths),
         seed=SEED,
+        reshuffle_each_iteration=True,
     )
     .batch(BATCH_SIZE)
     .prefetch(tf.data.AUTOTUNE)
@@ -234,20 +246,18 @@ test_dataset = (
     .prefetch(tf.data.AUTOTUNE)
 )
 
-# -----------------------------
-# 10. Build MobileNetV2 model
-# -----------------------------
 
-print()
-print("Building MobileNetV2 model...")
+# 9. BUILD MOBILENETV2
 
-base_model = tf.keras.applications.MobileNetV2(
+print("Building MobileNetV2...")
+
+base_model = keras.applications.MobileNetV2(
     input_shape=(224, 224, 3),
     include_top=False,
     weights="imagenet",
 )
 
-# Freeze pretrained layers initially
+# Stage 1: freeze the pretrained feature extractor.
 base_model.trainable = False
 
 inputs = keras.Input(
@@ -257,16 +267,15 @@ inputs = keras.Input(
 
 x = data_augmentation(inputs)
 
-x = tf.keras.applications.mobilenet_v2.preprocess_input(x)
+# Keep this preprocessing inside the model so that both
+# Keras and TFLite models receive the same input format.
+x = keras.applications.mobilenet_v2.preprocess_input(x)
 
-x = base_model(
-    x,
-    training=False,
-)
+x = base_model(x, training=False)
 
 x = layers.GlobalAveragePooling2D()(x)
 
-x = layers.Dropout(0.2)(x)
+x = layers.Dropout(0.30)(x)
 
 outputs = layers.Dense(
     NUM_CLASSES,
@@ -275,39 +284,33 @@ outputs = layers.Dense(
 )(x)
 
 model = keras.Model(
-    inputs,
-    outputs,
+    inputs=inputs,
+    outputs=outputs,
     name="EXOCARP_MobileNetV2",
-)
-
-# -----------------------------
-# 11. Compile model
-# -----------------------------
-
-model.compile(
-    optimizer=keras.optimizers.Adam(
-        learning_rate=0.001
-    ),
-    loss="sparse_categorical_crossentropy",
-    metrics=["accuracy"],
 )
 
 model.summary()
 
-# -----------------------------
-# 12. Create output directory
-# -----------------------------
 
-OUTPUT_DIR.mkdir(
-    parents=True,
-    exist_ok=True,
-)
-
-# -----------------------------
-# 13. Training callbacks
-# -----------------------------
+# 10. MODEL PATHS
 
 best_model_path = OUTPUT_DIR / "exocarp_best.keras"
+
+keras_model_path = (
+    OUTPUT_DIR / "exocarp_mango_disease_model.keras"
+)
+
+tflite_path = (
+    OUTPUT_DIR / "exocarp_mango_disease_model.tflite"
+)
+
+class_names_path = OUTPUT_DIR / "class_names.json"
+
+
+# 11. CALLBACKS
+#
+# Save the best validation model across both training stages.
+# Early stopping restores the best weights for the current stage.
 
 callbacks = [
     keras.callbacks.ModelCheckpoint(
@@ -317,138 +320,248 @@ callbacks = [
         mode="max",
         verbose=1,
     ),
-
     keras.callbacks.EarlyStopping(
-        monitor="val_accuracy",
-        patience=5,
+        monitor="val_loss",
+        patience=4,
         restore_best_weights=True,
-        mode="max",
         verbose=1,
     ),
-
     keras.callbacks.ReduceLROnPlateau(
         monitor="val_loss",
         factor=0.2,
         patience=2,
-        min_lr=0.00001,
+        min_lr=0.000001,
         verbose=1,
     ),
 ]
 
-# -----------------------------
-# 14. Train model
-# -----------------------------
+
+# 12. STAGE 1: TRAIN CLASSIFICATION HEAD
 
 print()
-print("=" * 60)
-print("STARTING TRAINING")
-print("=" * 60)
+print("=" * 65)
+print("STAGE 1: TRAINING CLASSIFICATION LAYERS")
+print("=" * 65)
 
-history = model.fit(
+model.compile(
+    optimizer=keras.optimizers.Adam(learning_rate=0.001),
+    loss="sparse_categorical_crossentropy",
+    metrics=["accuracy"],
+)
+
+history_stage_1 = model.fit(
     train_dataset,
     validation_data=val_dataset,
-    epochs=EPOCHS,
+    epochs=INITIAL_EPOCHS,
     callbacks=callbacks,
 )
 
-# -----------------------------
-# 15. Evaluate on test dataset
-# -----------------------------
+
+# 13. STAGE 2: FINE-TUNE TOP MOBILENETV2 LAYERS
 
 print()
-print("=" * 60)
-print("EVALUATING MODEL")
-print("=" * 60)
+print("=" * 65)
+print("STAGE 2: FINE-TUNING MOBILENETV2")
+print("=" * 65)
+
+base_model.trainable = True
+
+# Freeze most of the pretrained model and fine-tune only
+# its later layers. Keep Batch Normalization layers frozen
+# for more stable fine-tuning on this dataset.
+
+fine_tune_from = max(0, len(base_model.layers) - 30)
+
+for layer in base_model.layers[:fine_tune_from]:
+    layer.trainable = False
+
+for layer in base_model.layers[fine_tune_from:]:
+    if isinstance(layer, layers.BatchNormalization):
+        layer.trainable = False
+
+model.compile(
+    optimizer=keras.optimizers.Adam(learning_rate=0.00001),
+    loss="sparse_categorical_crossentropy",
+    metrics=["accuracy"],
+)
+
+history_stage_2 = model.fit(
+    train_dataset,
+    validation_data=val_dataset,
+    epochs=FINE_TUNE_EPOCHS,
+    callbacks=callbacks,
+)
+
+
+# 14. LOAD BEST VALIDATION MODEL
+
+print()
+print("Loading best model based on validation accuracy...")
+
+model = keras.models.load_model(best_model_path)
+
+
+# 15. FINAL TEST EVALUATION
+#
+# The test set is used only after training and model selection.
+
+print()
+print("=" * 65)
+print("FINAL TEST EVALUATION")
+print("=" * 65)
 
 test_loss, test_accuracy = model.evaluate(
     test_dataset,
     verbose=1,
 )
 
+print(f"\nTest loss: {test_loss:.4f}")
+print(f"Test accuracy: {test_accuracy * 100:.2f}%")
+
+
+# 16. CLASSIFICATION REPORT
+
 print()
-print(f"Test Loss:     {test_loss:.4f}")
-print(f"Test Accuracy: {test_accuracy * 100:.2f}%")
+print("=" * 65)
+print("PER-CLASS PRECISION, RECALL, AND F1-SCORE")
+print("=" * 65)
 
-# -----------------------------
-# 16. Save final Keras model
-# -----------------------------
-
-keras_model_path = OUTPUT_DIR / "exocarp_mango_disease_model.keras"
-
-model.save(
-    keras_model_path
+probabilities = model.predict(
+    test_dataset,
+    verbose=1,
 )
 
-print()
-print(f"Keras model saved to:")
-print(keras_model_path)
+predicted_labels = np.argmax(probabilities, axis=1)
 
-# -----------------------------
-# 17. Save class names
-# -----------------------------
+report = classification_report(
+    test_labels,
+    predicted_labels,
+    labels=list(range(NUM_CLASSES)),
+    target_names=CLASS_NAMES,
+    digits=4,
+    zero_division=0,
+)
 
-class_names_path = OUTPUT_DIR / "class_names.json"
+print(report)
+
+report_path = OUTPUT_DIR / "classification_report.txt"
+
+with open(report_path, "w", encoding="utf-8") as file:
+    file.write(f"Test loss: {test_loss:.4f}\n")
+    file.write(f"Test accuracy: {test_accuracy * 100:.2f}%\n\n")
+    file.write(report)
+
+
+# 17. CONFUSION MATRIX
+
+matrix = confusion_matrix(
+    test_labels,
+    predicted_labels,
+    labels=list(range(NUM_CLASSES)),
+)
+
+print("Confusion matrix: actual classes are rows; predictions are columns.")
+print("Class order:")
+for index, name in enumerate(CLASS_NAMES):
+    print(f"{index}: {name}")
+
+print(matrix)
+
+matrix_path = OUTPUT_DIR / "confusion_matrix.csv"
+
+np.savetxt(
+    matrix_path,
+    matrix,
+    delimiter=",",
+    fmt="%d",
+)
+
+with open(
+    OUTPUT_DIR / "confusion_matrix_classes.json",
+    "w",
+    encoding="utf-8",
+) as file:
+    json.dump(CLASS_NAMES, file, indent=4)
+
+
+# 18. SAVE FINAL KERAS MODEL
+
+model.save(keras_model_path)
+
+print(f"\nKeras model saved:\n{keras_model_path}")
+
+
+# 19. SAVE CLASS NAMES IN THE EXACT OUTPUT ORDER
 
 with open(
     class_names_path,
     "w",
     encoding="utf-8",
 ) as file:
-    json.dump(
-        CLASS_NAMES,
-        file,
-        indent=4,
-    )
+    json.dump(CLASS_NAMES, file, indent=4)
+
+print(f"Class names saved:\n{class_names_path}")
+
+
+# 20. CONVERT TO TENSORFLOW LITE
 
 print()
-print(f"Class names saved to:")
-print(class_names_path)
-
-# -----------------------------
-# 18. Convert to TensorFlow Lite
-# -----------------------------
-
-print()
-print("=" * 60)
+print("=" * 65)
 print("CONVERTING TO TENSORFLOW LITE")
-print("=" * 60)
+print("=" * 65)
 
 converter = tf.lite.TFLiteConverter.from_keras_model(model)
 
 tflite_model = converter.convert()
 
-tflite_path = OUTPUT_DIR / "exocarp_mango_disease_model.tflite"
-
-with open(
-    tflite_path,
-    "wb",
-) as file:
+with open(tflite_path, "wb") as file:
     file.write(tflite_model)
 
+print(f"TFLite model saved:\n{tflite_path}")
+
+
+# 21. VERIFY TFLITE INPUT AND OUTPUT SHAPES
+
+interpreter = tf.lite.Interpreter(model_path=str(tflite_path))
+interpreter.allocate_tensors()
+
+input_details = interpreter.get_input_details()
+output_details = interpreter.get_output_details()
+
+print("\nTFLite input details:")
+for detail in input_details:
+    print("Shape:", detail["shape"])
+    print("Type:", detail["dtype"])
+
+print("\nTFLite output details:")
+for detail in output_details:
+    print("Shape:", detail["shape"])
+    print("Type:", detail["dtype"])
+
+
+# 22. FINAL SUMMARY
+
 print()
-print(f"TFLite model saved to:")
-print(tflite_path)
+print("=" * 65)
+print("EXOCARP TRAINING COMPLETE")
+print("=" * 65)
 
-# -----------------------------
-# 19. Final information
-# -----------------------------
-
-print()
-print("=" * 60)
-print("TRAINING COMPLETE")
-print("=" * 60)
-
-print(f"Training images:   {len(train_paths)}")
+print(f"Total images: {len(image_paths)}")
+print(f"Training images: {len(train_paths)}")
 print(f"Validation images: {len(val_paths)}")
-print(f"Testing images:    {len(test_paths)}")
-print(f"Test accuracy:     {test_accuracy * 100:.2f}%")
+print(f"Testing images: {len(test_paths)}")
+print(f"Test accuracy: {test_accuracy * 100:.2f}%")
 
-print()
-print("Files created:")
-print(f"- {best_model_path.name}")
-print(f"- {keras_model_path.name}")
-print(f"- {tflite_path.name}")
-print(f"- {class_names_path.name}")
+print("\nOutput files:")
+print(f"- {best_model_path}")
+print(f"- {keras_model_path}")
+print(f"- {tflite_path}")
+print(f"- {class_names_path}")
+print(f"- {report_path}")
+print(f"- {matrix_path}")
 
-print()
-print("EXOCARP AI model is ready for Flutter integration.")
+print(
+    "\nIMPORTANT: Review the test metrics and check for duplicate "
+    "or related images across dataset splits before treating the "
+    "reported accuracy as a real-world estimate."
+)

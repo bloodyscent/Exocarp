@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "707911156548-c39m4aj0qbdo95be7gqk4knu2qi7ldgf.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.exocarp",
+            "certificate_hash": "5af7975be58349bfd64d75c7f3f68bee27802f41"
+          }
+        },
+        {
           "client_id": "707911156548-hds04bdrjrd7h3tpamrkhd1ntjf1co3g.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {

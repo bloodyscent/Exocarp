@@ -1,0 +1,17 @@
+Test loss: 0.0857
+Test accuracy: 97.45%
+
+                  precision    recall  f1-score   support
+
+     Anthracnose     0.9184    0.9184    0.9184        49
+Bacterial Canker     0.9434    0.9259    0.9346        54
+  Cutting Weevil     1.0000    1.0000    1.0000        46
+        Die Back     1.0000    1.0000    1.0000        48
+      Gall Midge     1.0000    0.9792    0.9895        48
+         Healthy     1.0000    1.0000    1.0000        37
+  Powdery Mildew     1.0000    1.0000    1.0000        31
+     Sooty Mould     0.9524    1.0000    0.9756        40
+
+        accuracy                         0.9745       353
+       macro avg     0.9768    0.9779    0.9773       353
+    weighted avg     0.9746    0.9745    0.9745       353

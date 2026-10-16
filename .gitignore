@@ -56,3 +56,7 @@ __pycache__/
 
 # Widget Preview
 .widget_preview/
+
+.venv/
+venv/
+ai/models/*.keras
